@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI SpillGuard Pro - Oil Spill Detection</title>
+  <meta name="description" content="Enterprise-grade real-time oil spill detection from satellite SAR imagery using Deep Learning (U-Net + ResNet34), running entirely in your browser." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛢️</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Mobile sidebar toggle -->
+  <button id="sidebarToggle" class="sidebar-toggle" aria-label="Toggle configuration">⚙️</button>
+
+  <div class="layout">
+    <!-- ==================== SIDEBAR ==================== -->
+    <aside class="sidebar" id="sidebar">
+      <h2 class="sidebar-header">⚙️ System Configuration</h2>
+
+      <div class="status-success" id="deviceStatus">⏳ Loading inference engine…</div>
+
+      <hr />
+
+      <h3 class="sidebar-sub">🚨 Alert Thresholds</h3>
+      <div class="slider-group">
+        <label>Oil Spill (%) <span class="slider-val" id="th-oil-val">5.0</span></label>
+        <input type="range" id="th-oil" min="0" max="50" step="0.5" value="5" />
+      </div>
+      <div class="slider-group">
+        <label>Look-alike (%) <span class="slider-val" id="th-look-val">10.0</span></label>
+        <input type="range" id="th-look" min="0" max="50" step="0.5" value="10" />
+      </div>
+      <div class="slider-group">
+        <label>Ship/Wake (%) <span class="slider-val" id="th-ship-val">3.0</span></label>
+        <input type="range" id="th-ship" min="0" max="50" step="0.5" value="3" />
+      </div>
+
+      <hr />
+
+      <h3 class="sidebar-sub">🎨 Visualization</h3>
+      <div class="slider-group">
+        <label>Overlay Transparency <span class="slider-val" id="alpha-val">0.45</span></label>
+        <input type="range" id="alpha" min="0" max="1" step="0.05" value="0.45" />
+      </div>
+      <label class="check"><input type="checkbox" id="drawContours" checked /> Draw Contours</label>
+
+      <h3 class="sidebar-sub">🔍 Display Classes</h3>
+      <label class="check"><input type="checkbox" id="class-0" /> Background</label>
+      <label class="check"><input type="checkbox" id="class-1" checked /> Oil Spill</label>
+      <label class="check"><input type="checkbox" id="class-2" checked /> Look-alike</label>
+      <label class="check"><input type="checkbox" id="class-3" checked /> Ship/Wake</label>
+
+      <hr />
+
+      <h3 class="sidebar-sub">💾 Storage</h3>
+      <label class="check"><input type="checkbox" id="autoSave" checked /> Auto-save Results</label>
+
+      <hr />
+
+      <h3 class="sidebar-sub">🎨 Class Legend</h3>
+      <div id="legend"></div>
+    </aside>
+
+    <!-- ==================== MAIN ==================== -->
+    <main class="main">
+      <header>
+        <h1 class="main-title">🛢️ AI SpillGuard Pro<br />
+          <small>Real-Time Oil Spill Detection &amp; Monitoring System</small>
+        </h1>
+        <p class="subtitle"><strong>Enterprise-grade</strong> satellite image segmentation powered by Deep Learning (U-Net + ResNet34)</p>
+      </header>
+
+      <!-- Tabs -->
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="detection" role="tab">🔍 Detection &amp; Analysis</button>
+        <button class="tab" data-tab="history" role="tab">📊 History &amp; Analytics</button>
+        <button class="tab" data-tab="api" role="tab">🔌 API Integration</button>
+      </div>
+
+      <!-- ===== DETECTION TAB ===== -->
+      <section class="tab-panel active" id="tab-detection">
+        <h3 class="section-title">📤 Upload Satellite SAR Image</h3>
+
+        <div class="uploader" id="dropzone">
+          <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp" hidden />
+          <div class="uploader-inner">
+            <div class="uploader-icon">🛰️</div>
+            <p><strong>Drag &amp; drop</strong> a SAR / satellite image here, or <button id="browseBtn" class="link-btn">browse</button></p>
+            <small>PNG, JPG, JPEG, TIFF, BMP</small>
+          </div>
+        </div>
+
+        <div id="modelProgress" class="info-box" style="display:none;">
+          <strong>⏳ Loading AI model…</strong>
+          <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+          <small id="progressText">Downloading model weights (~24 MB, one-time)…</small>
+        </div>
+
+        <!-- Results -->
+        <div id="results" style="display:none;">
+          <hr />
+          <div id="alertArea"></div>
+
+          <hr />
+          <h3 class="section-title">🖼️ Detection Results - Visual Comparison</h3>
+          <div class="trinity">
+            <div class="result-card">
+              <h4>📷 Original SAR</h4>
+              <canvas id="canvasOriginal"></canvas>
+              <small id="capOriginal" class="cap"></small>
+            </div>
+            <div class="result-card">
+              <h4>🎯 Categorical Mask</h4>
+              <canvas id="canvasMask"></canvas>
+              <small class="cap">Segmentation Mask (4-Class)</small>
+            </div>
+            <div class="result-card">
+              <h4>🔍 Alpha-Blended Overlay</h4>
+              <canvas id="canvasOverlay"></canvas>
+              <small id="capOverlay" class="cap"></small>
+            </div>
+          </div>
+
+          <hr />
+          <h3 class="section-title">📊 Detection Analytics</h3>
+          <div class="analytics">
+            <div class="result-card chart-card">
+              <h4>Coverage Distribution 🍩</h4>
+              <canvas id="pieChart"></canvas>
+            </div>
+            <div class="metrics-col">
+              <h4>Key Metrics</h4>
+              <div class="metric-card">
+                <div class="metric-label">🛢️ Oil Spill Coverage</div>
+                <div class="metric-value" id="oilPct">0.00%</div>
+                <div class="metric-delta" id="oilPx">0 px</div>
+              </div>
+              <div class="status-box" id="statusBox">
+                <small>System Status</small><br />
+                <strong id="statusText">✅ SAFE</strong>
+              </div>
+            </div>
+          </div>
+
+          <hr />
+          <h3 class="section-title">⬇️ Export &amp; Download Results</h3>
+          <div class="downloads">
+            <button class="btn-download" id="dlOverlay">📥 Download Overlay</button>
+            <button class="btn-download" id="dlMask">📥 Download Mask</button>
+            <button class="btn-download" id="dlReport">📥 Download Report (JSON)</button>
+          </div>
+        </div>
+
+        <!-- Empty state -->
+        <div id="emptyState">
+          <div class="info-box">👆 Upload a satellite or SAR image to begin oil spill detection</div>
+          <hr />
+          <h3 class="section-title">ℹ️ System Information</h3>
+          <div class="info-grid">
+            <div class="info-block">
+              <strong>Model Architecture:</strong>
+              <ul>
+                <li>Type: U-Net</li>
+                <li>Encoder: ResNet34</li>
+                <li>Classes: 4</li>
+                <li>Input Size: 256×256</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <strong>Runtime Environment:</strong>
+              <ul>
+                <li>Engine: ONNX Runtime Web (in-browser)</li>
+                <li>Acceleration: WebGPU / WASM</li>
+                <li>Supported Formats: PNG, JPG, JPEG, TIFF, BMP</li>
+              </ul>
+            </div>
+          </div>
+
+          <details class="guide">
+            <summary>📖 Usage Guide</summary>
+            <div>
+              <p><strong>How to use AI SpillGuard Pro:</strong></p>
+              <ol>
+                <li><strong>Upload Image</strong>: Drag a SAR or satellite image, or click browse.</li>
+                <li><strong>Wait for Processing</strong>: The AI model runs in your browser (typically &lt; 2 seconds).</li>
+                <li><strong>Review Results</strong>: Examine the visual comparison and detection statistics.</li>
+                <li><strong>Check Alerts</strong>: Oil spills exceeding thresholds trigger alerts.</li>
+                <li><strong>Download</strong>: Export overlays, masks, or JSON reports.</li>
+                <li><strong>Configure</strong>: Adjust thresholds and visualization in the sidebar.</li>
+              </ol>
+              <p><strong>Detection Classes:</strong></p>
+              <ul>
+                <li>🛢️ <strong>Oil Spill</strong>: Primary target for detection</li>
+                <li>⚠️ <strong>Look-alike</strong>: Natural phenomena that resemble oil spills</li>
+                <li>🚢 <strong>Ship/Wake</strong>: Vessel activity and wake patterns</li>
+                <li>⬛ <strong>Background</strong>: Clean ocean surface</li>
+              </ul>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <!-- ===== HISTORY TAB ===== -->
+      <section class="tab-panel" id="tab-history">
+        <h3 class="section-title">📜 Detection History &amp; Analytics</h3>
+        <div id="historyContent"></div>
+      </section>
+
+      <!-- ===== API TAB ===== -->
+      <section class="tab-panel" id="tab-api">
+        <h3 class="section-title">🔌 API Integration Guide</h3>
+        <div id="apiContent"></div>
+      </section>
+
+      <hr />
+      <footer>
+        <span>🛢️ <strong>AI SpillGuard Pro</strong> v1.0.0</span>
+        <span>⚡ Powered by U-Net + ResNet34 | Engine: <span id="footerDevice">ONNX Runtime Web</span></span>
+        <span>🔬 Real-time Inference Engine | 4-Class Segmentation</span>
+      </footer>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- ONNX Runtime Web + Chart.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

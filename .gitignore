@@ -1,0 +1,25 @@
+# ============================================================================
+#  Vercel_version — static deployment .gitignore
+#  This folder is meant to be pushed & deployed on its own (Vercel static site).
+# ============================================================================
+
+# --- Re-include the trained model (IMPORTANT) ---------------------------------
+# The repository root .gitignore ignores *.onnx (to keep large training files
+# out of git). This static deployment MUST ship the quantized model, so force
+# it back in. Without these lines the deployed site has no model and breaks.
+!*.onnx
+!model/
+!model/*.onnx
+
+# --- Vercel / tooling ---------------------------------------------------------
+.vercel/
+node_modules/
+*.log
+
+# --- OS junk ------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+
+# --- Python (only the dev-only tools/convert_to_onnx.py lives here) -----------
+__pycache__/
+*.py[cod]
